@@ -1,7 +1,9 @@
 /*
- * libncipher - n_cipher library for C.
+ * bincipher
+ *
+ * misc.c
  * 
- * Copyright (c) 2015 sasairc
+ * Copyright (c) 2017 sasairc
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal

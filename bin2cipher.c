@@ -1,14 +1,39 @@
 /*
+ * bincipher
+ *
  * bin2cipher.c
+ * 
+ * Copyright (c) 2017 sasairc
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+ * OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <getopt.h>
 #include <n_cipher.h>
 
 #define PROGNAME    "bin2cipher"
+#define AUTHOR      "sasairc"
+#define MAIL_TO     "sasairc@ssiserver.moe.hm"
 
 typedef struct _LIST_T {
     int     number;
@@ -16,7 +41,38 @@ typedef struct _LIST_T {
     struct  _LIST_T*    next;
 } list_t;
 
-int bin_to_cipher(FILE* fp, N_CIPHER* nc)
+typedef struct {
+    char*   seed;
+    char*   delimiter;
+    char*   iarg;
+    char*   oarg;
+} b2c_t;
+
+void print_usage(N_CIPHER* n_cipher)
+{
+    init_n_cipher(&n_cipher);
+    n_cipher->config(&n_cipher, NULL, NULL);
+    fprintf(stdout, "The %s, with %s\n\
+Usage: bin2cipher --input=FILE [OPTION]...\n\
+\n\
+Mandatory arguments to long options are mandatory for short options too.\n\
+\n\
+  -i,  --input=FILE          input file (required)\n\
+  -o,  --output=FILE         output file (default stdout)\n\
+  -s,  --seed=STR            specify seed string (default = %s)\n\
+  -m,  --delimiter=STR       specify delimiter string (default = %s)\n\
+\n\
+       --help                display this help and exit\n\
+\n\
+Report %s bugs to %s <%s>\n", 
+        PROGNAME, n_cipher->version(), n_cipher->seed, n_cipher->delimiter,
+        PROGNAME, AUTHOR, MAIL_TO);
+    n_cipher->release(n_cipher);
+
+    exit(0);
+}
+
+int bin_to_cipher(FILE* fp1, FILE* fp2, N_CIPHER* nc)
 {
     int             y       = 0,
                     fragmnt = 0;
@@ -27,7 +83,7 @@ int bin_to_cipher(FILE* fp, N_CIPHER* nc)
 
     list_t*         table   = NULL;
 
-    while (fread(&b, sizeof(unsigned char), 1, fp) == 1) {
+    while (fread(&b, sizeof(unsigned char), 1, fp1) == 1) {
         y = 0;
         while (b > 0) {
             fragmnt = b % nc->table->decimal;
@@ -40,14 +96,11 @@ int bin_to_cipher(FILE* fp, N_CIPHER* nc)
         }
         y--;
         while (y >= 0) {
-            fprintf(stdout, "%s",
-                    *(buf + y));
+            fputs(*(buf + y), fp2);
             y--;
         }
-        fprintf(stdout, "%s",
-                nc->delimiter);
+        fputs(nc->delimiter, fp2);
     }
-    putchar('\n');
 
     return 0;
 }
@@ -58,46 +111,78 @@ int main(int argc, char* argv[])
                 index       = 0,
                 status      = 0;
 
-    char*       seed        = NULL,
-        *       delimiter   = NULL;
-
-    FILE*       fp          = NULL;
+    FILE*       fp1         = NULL,
+        *       fp2         = NULL;
 
     N_CIPHER*   nc          = NULL;
+
+    b2c_t       b2c         = {
+        NULL, NULL, NULL, NULL,
+    };
 
     struct  option opts[] = {
         {"seed",        required_argument,  NULL, 's'},
         {"delimiter",   required_argument,  NULL, 'm'},
+        {"input",       required_argument,  NULL, 'i'},
+        {"output",      required_argument,  NULL, 'o'},
+        {"help",        no_argument,        NULL,  0 },
         {0, 0, 0, 0},
     };
-    while ((res = getopt_long(argc, argv, "s:m:", opts, &index)) != -1) {
+
+    while ((res = getopt_long(argc, argv, "s:m:i:o:", opts, &index)) != -1) {
         switch (res) {
             case    's':
-                seed = optarg;
+                b2c.seed = optarg;
                 break;
             case    'm':
-                delimiter = optarg;
+                b2c.delimiter = optarg;
                 break;
+            case    'i':
+                b2c.iarg = optarg;
+                break;
+            case    'o':
+                b2c.oarg = optarg;
+                break;
+            case    0:
+                print_usage(nc);
             case    '?':
                 return -1;
         }
     }
+    if (b2c.iarg == NULL)
+        print_usage(nc);
+
+    if ((fp1 = fopen(b2c.iarg, "rb")) == NULL) {
+        fprintf(stderr, "%s: %s: %s\n",
+                PROGNAME, b2c.iarg, strerror(errno));
+        status = 3; goto RELEASE;
+    }
+    if (b2c.oarg != NULL) {
+        if ((fp2 = fopen(b2c.oarg, "w")) == NULL) {
+            fprintf(stderr, "%s: %s: %s\n",
+                    PROGNAME, b2c.oarg, strerror(errno));
+            status = 3; goto RELEASE;
+        }
+    } else {
+        fp2 = stdout;
+    }
+
     init_n_cipher(&nc);
-    if (seed != NULL || delimiter != NULL) {
-        switch (nc->check_argument(seed, delimiter)) {
+    if (b2c.seed != NULL || b2c.delimiter != NULL) {
+        switch (nc->check_argument(b2c.seed, b2c.delimiter)) {
             case    0:
                 break;
             case    S_TOO_SHORT:
                 fprintf(stderr, "%s: seed too short: %s\n",
-                        PROGNAME, seed);
+                        PROGNAME, b2c.seed);
                 status = 2; goto RELEASE;
             case    D_TOO_SHORT:
                 fprintf(stderr, "%s: delimiter too short: %s\n",
-                        PROGNAME, delimiter);
+                        PROGNAME, b2c.delimiter);
                 status = 2; goto RELEASE;
             case    S_TOO_LONG:
                 fprintf(stderr, "%s: seed too long: %s\n",
-                        PROGNAME, seed);
+                        PROGNAME, b2c.seed);
                 status = 2; goto RELEASE;
             default:
                 fprintf(stderr, "%s: invalid seed or delimiter\n",
@@ -105,23 +190,16 @@ int main(int argc, char* argv[])
                 status = 2; goto RELEASE;
         }
     }
-    nc->config(&nc, seed, delimiter);
-    if (optind == argc) {
-        fprintf(stdout, "Usage: bin2cipher INPUT\n");
-        goto RELEASE;
-    }
-    if ((fp = fopen(argv[optind], "rb")) == NULL) {
-        fprintf(stderr, "%s: %s\n",
-                PROGNAME, strerror(errno));
-        status = 3; goto RELEASE;
-    }
-    status = bin_to_cipher(fp, nc);
+    nc->config(&nc, b2c.seed, b2c.delimiter);
+    status = bin_to_cipher(fp1, fp2, nc);
 
 RELEASE:
-    if (fp != NULL)
-        fclose(fp);
-
-    nc->release(nc);
+    if (fp1 != NULL)
+        fclose(fp1);
+    if (fp2 != stdout && fp2 != NULL)
+        fclose(fp2);
+    if (nc != NULL)
+        nc->release(nc);
 
     return status;
 }
