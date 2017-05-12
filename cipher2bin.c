@@ -166,8 +166,9 @@ int cipher_to_bin(N_CIPHER* nc, FILE* fp1, FILE* fp2)
     token = mbstrtok(buf, nc->delimiter);
     while (token != NULL) {
         bin = char_to_bin(nc, token);
-        fwrite(&bin, sizeof(unsigned char), 1, fp2);
         token = mbstrtok(NULL, nc->delimiter);
+        if (token != NULL)
+            fwrite(&bin, sizeof(unsigned char), 1, fp2);
     }
     free(buf);
 
