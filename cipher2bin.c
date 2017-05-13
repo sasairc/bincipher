@@ -65,10 +65,21 @@ Mandatory arguments to long options are mandatory for short options too.\n\
   -m,  --delimiter=STR       specify delimiter string (default = %s)\n\
 \n\
        --help                display this help and exit\n\
+       --version             output version infomation and exit\n\
 \n\
 Report %s bugs to %s <%s>\n", 
         PROGNAME, n_cipher->version(), n_cipher->seed, n_cipher->delimiter,
         PROGNAME, AUTHOR, MAIL_TO);
+    n_cipher->release(n_cipher);
+
+    exit(0);
+}
+
+void print_version(N_CIPHER* n_cipher)
+{
+    init_n_cipher(&n_cipher);
+    fprintf(stdout, "%s with %s\n",
+            PROGNAME, n_cipher->version());
     n_cipher->release(n_cipher);
 
     exit(0);
@@ -160,8 +171,10 @@ int cipher_to_bin(N_CIPHER* nc, FILE* fp1, FILE* fp2)
                 goto ERR;
             }
         }
-        *(buf + done) = c;
-        done++;
+        if (c != '\n') {
+            *(buf + done) = c;
+            done++;
+        }
     }
     token = mbstrtok(buf, nc->delimiter);
     while (token != NULL) {
@@ -202,6 +215,7 @@ int main(int argc, char* argv[])
         {"input",       required_argument,  NULL, 'i'},
         {"output",      required_argument,  NULL, 'o'},
         {"help",        no_argument,        NULL,  0 },
+        {"version",     no_argument,        NULL,  1 },
         {0, 0, 0, 0},
     };
 
@@ -221,6 +235,8 @@ int main(int argc, char* argv[])
                 break;
             case    0:
                 print_usage(nc);
+            case    1:
+                print_version(nc);
             case    '?':
                 return -1;
         }

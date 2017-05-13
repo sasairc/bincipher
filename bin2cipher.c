@@ -46,6 +46,7 @@ typedef struct {
     char*   delimiter;
     char*   iarg;
     char*   oarg;
+    size_t  warg;
 } b2c_t;
 
 void print_usage(N_CIPHER* n_cipher)
@@ -61,8 +62,10 @@ Mandatory arguments to long options are mandatory for short options too.\n\
   -o,  --output=FILE         output file (default stdout)\n\
   -s,  --seed=STR            specify seed string (default = %s)\n\
   -m,  --delimiter=STR       specify delimiter string (default = %s)\n\
+  -w,  --wrap=SIZE           wrap encoded lines after SIZE byte (default = 0)\n\
 \n\
        --help                display this help and exit\n\
+       --version             output version infomation and exit\n\
 \n\
 Report %s bugs to %s <%s>\n", 
         PROGNAME, n_cipher->version(), n_cipher->seed, n_cipher->delimiter,
@@ -72,10 +75,22 @@ Report %s bugs to %s <%s>\n",
     exit(0);
 }
 
-int bin_to_cipher(FILE* fp1, FILE* fp2, N_CIPHER* nc)
+void print_version(N_CIPHER* n_cipher)
+{
+    init_n_cipher(&n_cipher);
+    fprintf(stdout, "%s with %s\n",
+            PROGNAME, n_cipher->version());
+    n_cipher->release(n_cipher);
+
+    exit(0);
+}
+
+int bin_to_cipher(FILE* fp1, FILE* fp2, N_CIPHER* nc, int wrap)
 {
     int             y       = 0,
                     fragmnt = 0;
+
+    size_t          byte    = 0;
 
     unsigned char   b       = '\0';
 
@@ -100,6 +115,28 @@ int bin_to_cipher(FILE* fp1, FILE* fp2, N_CIPHER* nc)
             y--;
         }
         fputs(nc->delimiter, fp2);
+        if (wrap > 0 && wrap == byte) {
+            fputs("\n", fp2);
+            byte = 0;
+        }
+        byte++;
+    }
+
+    return 0;
+}
+
+int strisdigit(char* str)
+{
+    int i   = 0;
+
+    while (i < strlen(str)) {
+        if (!isdigit(*(str + i))) {
+            fprintf(stderr, "%s: %s: invalid wrap size\n",
+                    PROGNAME, str);
+
+            return -1;
+        }
+        i++;
     }
 
     return 0;
@@ -117,7 +154,7 @@ int main(int argc, char* argv[])
     N_CIPHER*   nc          = NULL;
 
     b2c_t       b2c         = {
-        NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, 0,
     };
 
     struct  option opts[] = {
@@ -125,11 +162,13 @@ int main(int argc, char* argv[])
         {"delimiter",   required_argument,  NULL, 'm'},
         {"input",       required_argument,  NULL, 'i'},
         {"output",      required_argument,  NULL, 'o'},
+        {"wrap",        required_argument,  NULL, 'w'},
         {"help",        no_argument,        NULL,  0 },
+        {"version",     no_argument,        NULL,  1 },
         {0, 0, 0, 0},
     };
 
-    while ((res = getopt_long(argc, argv, "s:m:i:o:", opts, &index)) != -1) {
+    while ((res = getopt_long(argc, argv, "s:m:i:o:w:", opts, &index)) != -1) {
         switch (res) {
             case    's':
                 b2c.seed = optarg;
@@ -143,8 +182,15 @@ int main(int argc, char* argv[])
             case    'o':
                 b2c.oarg = optarg;
                 break;
+            case    'w':
+                if (strisdigit(optarg) < 0)
+                    return -1;
+                b2c.warg = atoi(optarg);
+                break;
             case    0:
                 print_usage(nc);
+            case    1:
+                print_version(nc);
             case    '?':
                 return -1;
         }
@@ -191,7 +237,7 @@ int main(int argc, char* argv[])
         }
     }
     nc->config(&nc, b2c.seed, b2c.delimiter);
-    status = bin_to_cipher(fp1, fp2, nc);
+    status = bin_to_cipher(fp1, fp2, nc, b2c.warg);
 
 RELEASE:
     if (fp1 != NULL)
