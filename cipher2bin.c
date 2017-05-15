@@ -41,6 +41,7 @@ typedef struct _LIST_T {
     int     number;
     char*   character;
     struct  _LIST_T*    next;
+    struct  _LIST_T*    prev;
 } list_t;
 
 typedef struct {
@@ -85,57 +86,91 @@ void print_version(N_CIPHER* n_cipher)
     exit(0);
 }
 
+list_t* seek_table_end(list_t* start)
+{
+    list_t* t1  = start;
+
+    while (t1->next != NULL)
+        t1 = t1->next;
+
+    return t1;
+}
+
+int get_character_size(unsigned char code)
+{
+    size_t  byte    = 0;
+
+    if ((code & 0x80) == 0x00)
+        byte = 1;
+    else if ((code & 0xE0) == 0xC0)
+        byte = 2;
+    else if ((code & 0xF0) == 0xE0)
+        byte = 3;
+    else if ((code & 0xF8) == 0xF0)
+        byte = 4;
+    else if ((code & 0xFC) == 0xF8)
+        byte = 5;
+    else if ((code & 0xFE) == 0xFC)
+        byte = 6;
+    else
+        return -1;
+
+    return byte;
+}
+
 unsigned char char_to_bin(N_CIPHER* nc, char* str)
 {
     int             i       = 0,
+                    no      = 0,
                     digit   = 0;
 
-    unsigned char   bin     = '\0',
-                    code    = '\0';
+    unsigned char   bin     = '\0';
 
     size_t          byte    = 0;
 
-    list_t*         table   = NULL;
+    list_t*         end     = NULL,
+          *         t1      = NULL,
+          *         t2      = NULL;
 
+    end   = seek_table_end(nc->table->start);
     digit = mbstrlen(str) - 1;
     while (*str != '\0') {
-        code = (unsigned char)*str;
-
         /*
          * get character size
          */
-        if ((code & 0x80) == 0x00)
-            byte = 1;
-        else if ((code & 0xE0) == 0xC0)
-            byte = 2;
-        else if ((code & 0xF0) == 0xE0)
-            byte = 3;
-        else if ((code & 0xF8) == 0xF0)
-            byte = 4;
-        else if ((code & 0xFC) == 0xF8)
-            byte = 5;
-        else if ((code & 0xFE) == 0xFC)
-            byte = 6;
-        else
+        if ((byte = get_character_size((unsigned char)*str)) < 0)
             return 0;
 
         /*
          * search character
          */
-        table = nc->table->start;
-        while (table != NULL) {
+        t1 = nc->table->start;
+        t2 = end;
+        while (t1 != NULL && t2 != NULL) {
             i = 0;
-            while (*(str + i) == *(table->character + i))
+            while (*(str + i) == *(t1->character + i))
                 i++;
-            if (i >= byte)
+            if (i >= byte) {
+                no = t1->number;
                 break;
-            else
-                table = table->next;
+            }
+            i = 0;
+            while (*(str + i) == *(t2->character + i))
+                i++;
+            if (i >= byte) {
+                no = t2->number;
+                break;
+            }
+            if (t1 == t2) {
+                break;
+            }
+            t1 = t1->next;
+            t2 = t2->prev;
         }
-        if (table == 0 && i < byte)
+        if (t1 == t2 && i < byte)
             return 0;
 
-        bin += table->number * pow(nc->table->decimal, digit);
+        bin += no * pow(nc->table->decimal, digit);
         str += byte;
         digit--;
     }

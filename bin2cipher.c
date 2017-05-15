@@ -40,6 +40,7 @@ typedef struct _LIST_T {
     int     number;
     char*   character;
     struct  _LIST_T*    next;
+    struct  _LIST_T*    prev;
 } list_t;
 
 typedef struct {
@@ -86,6 +87,16 @@ void print_version(N_CIPHER* n_cipher)
     exit(0);
 }
 
+list_t* seek_table_end(list_t* start)
+{
+    list_t* t1  = start;
+
+    while (t1->next != NULL)
+        t1 = t1->next;
+
+    return t1;
+}
+
 int bin_to_cipher(FILE* fp1, FILE* fp2, N_CIPHER* nc, int wrap)
 {
     int             y       = 0,
@@ -95,18 +106,33 @@ int bin_to_cipher(FILE* fp1, FILE* fp2, N_CIPHER* nc, int wrap)
 
     unsigned char   b       = '\0';
 
-    char*           buf[8]  = {NULL};
+    char*           p       = NULL,
+        *           buf[8]  = {NULL};
 
-    list_t*         table   = NULL;
+    list_t*         end     = NULL,
+          *         t1      = NULL,
+          *         t2      = NULL;
 
+    end = seek_table_end(nc->table->start);
     while (fread(&b, sizeof(unsigned char), 1, fp1) == 1) {
         y = 0;
         while (b > 0) {
             fragmnt = b % nc->table->decimal;
-            table = nc->table->start;
-            while (fragmnt != table->number)
-                table = table->next;
-            *(buf + y) = table->character;
+            t1 = nc->table->start;
+            t2 = end;
+            while (t1 != NULL && t2 != NULL) {
+                if (fragmnt == t1->number) {
+                    p = t1->character;
+                    break;
+                }
+                if (fragmnt == t2->number) {
+                    p = t2->character;
+                    break;
+                }
+                t1 = t1->next;
+                t2 = t2->prev;
+            }
+            *(buf + y) = p;
             b /= nc->table->decimal;
             y++;
         }
